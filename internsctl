@@ -1,0 +1,163 @@
+#!/bin/bash
+
+function display_help() {
+    echo "Usage: internsctl [OPTIONS]"
+    echo "Custom Linux Command for Operations"
+    echo ""
+    echo "Options:"
+    echo "  --help   "
+    echo "  --version "
+    echo "  cpu getinfo "
+    echo "  memory getinfo "
+    echo "  user create <username>  "
+    echo "  user list "
+    echo "  user list --sudo-only"
+    echo "  file getinfo [OPTIONS] <file-name>"
+    echo "    --size, -s           Print file size"
+    echo "    --permissions, -p    Print file permissions"
+    echo "    --owner, -o          Print file owner"
+    echo "    --last-modified, -m  Print last modified timestamp"
+}
+
+function display_version() {
+    echo "internsctl v0.1.0"
+}
+
+function get_cpu_info() {
+    echo "CPU Information:"
+    wmic cpu get caption
+}
+
+function get_memory_info() {
+    echo "Memory Information:"
+    wmic memorychip get capacity
+}
+function create_user() {
+    if [ -z "$1" ]; then
+        echo "Error: Missing username. Usage: internsctl user create <username>"
+        exit 1
+    fi
+
+    # Check if the user already exists
+    if net user "$1" > /dev/null 2>&1; then
+        echo "Error: User '$1' already exists."
+        exit 1
+    fi
+
+    # Create the user using PowerShell
+    if powershell -Command "New-LocalUser -Name '$1' -Password (ConvertTo-SecureString -AsPlainText 'vanika12@' -Force)"; then
+        echo "User '$1' created successfully."
+    else
+        echo "Error: Failed to create user '$1'."
+        exit 1
+    fi
+}
+
+
+
+
+
+function list_users() {
+    net user | sed -n '4,$p'
+}
+
+
+
+
+
+function list_sudo_users() {
+    getent group sudo | cut -d: -f4 | tr ',' '\n'
+}
+
+function get_file_info() {
+    if [ -z "$1" ]; then
+        echo "Error: Missing file name. Usage: internsctl file getinfo [OPTIONS] <file-name>"
+        exit 1
+    fi
+
+    file_name="$1"
+    file_info="File: $file_name"
+
+    # Check for options
+    while [ $# -gt 1 ]; do
+        case "$2" in
+            --size | -s)
+                # Use PowerShell to get file size
+                size=$(powershell -Command "(Get-Item '$file_name').length")
+                file_info+="\nSize(B): $size"
+                ;;
+            --permissions | -p)
+                # Use PowerShell to get file permissions
+                permissions=$(powershell -Command "Get-Acl '$file_name' | Format-List -Property AccessToString | Out-String")
+                file_info+="\nAccess:\n$permissions"
+                ;;
+            --owner | -o)
+                # Use PowerShell to get file owner
+                owner=$(powershell -Command "(Get-Acl '$file_name').Owner")
+                file_info+="\nOwner: $owner"
+                ;;
+            --last-modified | -m)
+                # Use PowerShell to get last modified timestamp
+                modified=$(powershell -Command "(Get-Item '$file_name').LastWriteTime")
+                file_info+="\nModify: $modified"
+                ;;
+            *)
+                echo "Error: Unknown option '$2'"
+                exit 1
+                ;;
+        esac
+        shift
+    done
+
+    echo -e "$file_info"
+}
+case "$1" in
+    --help)
+        display_help
+        ;;
+    --version)
+        display_version
+        ;;
+    cpu)
+        if [ "$2" == "getinfo" ]; then
+            get_cpu_info
+        else
+            echo "Invalid subcommand for 'cpu'. Use 'internsctl cpu getinfo'."
+            exit 1
+        fi
+        ;;
+    memory)
+        if [ "$2" == "getinfo" ]; then
+            get_memory_info
+        else
+            echo "Invalid subcommand for 'memory'. Use 'internsctl memory getinfo'."
+            exit 1
+        fi
+        ;;
+    user)
+        case "$2" in
+            create)
+                create_user "$@"
+                ;;
+            list)
+                list_users
+                ;;
+            *)
+                echo "Error: Unknown subcommand for 'user'."
+                exit 1
+                ;;
+        esac
+        ;;
+    file)
+        if [ "$2" == "getinfo" ]; then
+            get_file_info "$3" "${@:4}"
+        else
+            echo "Invalid subcommand for 'file'. Use 'internsctl file getinfo <file-name>'."
+            exit 1
+        fi
+        ;;
+    *)
+        echo "Error: Unknown command. Use 'internsctl --help' for usage guidelines."
+        exit 1
+        ;;
+esac
